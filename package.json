@@ -1,0 +1,50 @@
+{
+  "name": "dsh-ocean-bg",
+  "version": "0.1.0",
+  "description": "把 DeepSeek Harness 的聊天背景换成实时 WebGL 海洋，并把整个界面改成青绿玻璃（半成品，招募维护者）",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "assets",
+    "cordis.patch.yml"
+  ],
+  "scripts": {
+    "build": "node lib/build.mjs"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "theme",
+    "webgl",
+    "ocean",
+    "glassmorphism"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/1hhr10/dsh-ocean-bg.git"
+  },
+  "bugs": {
+    "url": "https://github.com/1hhr10/dsh-ocean-bg/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": []
+    }
+  }
+}

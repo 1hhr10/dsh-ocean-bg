@@ -1,0 +1,4 @@
+# dsh-ocean-bg — DSH bundle patch (top-level YAML array of loader patch entries)
+- insert:
+    - id: dsh-ocean-bg
+      name: dsh-ocean-bg

@@ -1,0 +1,1207 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>深海 · Ocean</title>
+<style>
+  :root{
+    --fg:#e8f2ff;
+    --dim:rgba(203,225,247,.52);
+    --line:rgba(150,200,255,.15);
+    --line-2:rgba(150,200,255,.10);
+    --accent:#8fc9ff;
+    --accent-soft:rgba(143,201,255,.16);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#04070d;}
+  body{
+    font-family:-apple-system,"Segoe UI","Microsoft YaHei UI","Microsoft YaHei",system-ui,sans-serif;
+    color:var(--fg);
+    -webkit-user-select:none;user-select:none;
+    -webkit-tap-highlight-color:transparent;
+    touch-action:manipulation;
+  }
+  #gl{position:fixed;inset:0;width:100%;height:100%;display:block;cursor:default;}
+
+  /* 只压一点边缘，让海面像“窗”而不是贴图 */
+  .vig{position:fixed;inset:0;pointer-events:none;z-index:2;
+    background:
+      radial-gradient(132% 102% at 50% 44%,transparent 44%,rgba(0,7,20,.42) 100%),
+      linear-gradient(180deg,rgba(0,0,0,.10) 0%,transparent 20%,transparent 76%,rgba(0,4,12,.26) 100%);}
+
+  /* ------------------------------------------------------------- 悬浮控件 */
+  #dock{
+    position:fixed;z-index:6;
+    right:max(16px,env(safe-area-inset-right));
+    bottom:max(16px,env(safe-area-inset-bottom));
+    display:flex;flex-direction:column;align-items:flex-end;gap:10px;
+    pointer-events:none;
+  }
+
+  .gear{
+    pointer-events:auto;
+    width:44px;height:44px;flex:0 0 44px;border-radius:50%;
+    display:grid;place-items:center;
+    color:#d6e9fc;
+    background:rgba(8,19,33,.52);
+    border:1px solid rgba(150,200,255,.20);
+    -webkit-backdrop-filter:blur(12px) saturate(120%);
+    backdrop-filter:blur(12px) saturate(120%);
+    box-shadow:0 14px 34px -12px rgba(0,8,24,.85),inset 0 1px 0 rgba(255,255,255,.08);
+    cursor:pointer;opacity:.62;
+    transition:opacity .6s ease,background .22s ease,border-color .22s ease,transform .3s ease,box-shadow .22s ease;
+    -webkit-appearance:none;appearance:none;
+  }
+  .gear svg{width:19px;height:19px;display:block;}
+  .gear:hover{opacity:1;background:rgba(18,38,60,.72);border-color:rgba(170,215,255,.44);transform:translateY(-1px);}
+  .gear:active{transform:translateY(0) scale(.96);}
+  .gear:focus-visible{outline:2px solid rgba(150,205,255,.75);outline-offset:3px;}
+  body.idle .gear{opacity:.22;}
+  body.idle .gear:hover{opacity:1;}
+
+  .panel{
+    pointer-events:none;
+    width:min(312px,calc(100vw - 24px));
+    max-height:calc(100vh - 96px);
+    overflow-y:auto;overscroll-behavior:contain;
+    padding:14px 14px 11px;
+    border-radius:16px;
+    background:linear-gradient(180deg,rgba(13,26,43,.80) 0%,rgba(6,14,25,.74) 100%);
+    border:1px solid rgba(150,200,255,.17);
+    box-shadow:0 30px 80px -22px rgba(0,8,24,.9),inset 0 1px 0 rgba(255,255,255,.07);
+    -webkit-backdrop-filter:blur(20px) saturate(125%);
+    backdrop-filter:blur(20px) saturate(125%);
+    opacity:0;visibility:hidden;
+    transform:translateY(10px) scale(.988);
+    transform-origin:100% 100%;
+    transition:opacity .26s cubic-bezier(.22,.7,.25,1),transform .26s cubic-bezier(.22,.7,.25,1),visibility .26s;
+    scrollbar-width:thin;scrollbar-color:rgba(150,200,255,.22) transparent;
+  }
+  .panel.open{opacity:1;visibility:visible;pointer-events:auto;transform:none;}
+  .panel.open + .gear{opacity:1;border-color:rgba(170,215,255,.38);}
+  .panel::-webkit-scrollbar{width:6px;}
+  .panel::-webkit-scrollbar-thumb{background:rgba(150,200,255,.22);border-radius:3px;}
+
+  .ph{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 12px;}
+  .ph .t{display:flex;align-items:center;gap:8px;font-size:11px;letter-spacing:.26em;color:#d3e7fb;}
+  .ph .t::before{content:"";width:5px;height:5px;border-radius:50%;background:var(--accent);
+    box-shadow:0 0 10px rgba(143,201,255,.95);}
+  .x{flex:0 0 26px;width:26px;height:26px;border-radius:8px;display:grid;place-items:center;
+    color:#9db7d3;background:rgba(255,255,255,.04);border:1px solid transparent;
+    cursor:pointer;transition:background .18s,color .18s;padding:0;}
+  .x:hover{background:rgba(255,255,255,.09);color:#eef7ff;}
+
+  .g{padding-top:11px;margin-top:11px;border-top:1px solid var(--line-2);}
+  .g.first{padding-top:0;margin-top:0;border-top:0;}
+  .cap{font-size:9.5px;letter-spacing:.30em;color:rgba(200,224,248,.46);margin:0 0 8px;}
+
+  /* 分段选择 */
+  .seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:3px;padding:3px;
+    border-radius:10px;background:rgba(2,9,18,.46);border:1px solid rgba(150,200,255,.10);}
+  .seg button{-webkit-appearance:none;appearance:none;border:0;background:transparent;
+    font:inherit;font-size:11.5px;letter-spacing:.08em;
+    color:rgba(205,227,248,.60);padding:7px 2px;border-radius:7px;cursor:pointer;
+    transition:background .18s,color .18s,box-shadow .18s;white-space:nowrap;}
+  .seg button:hover{color:#eef7ff;background:rgba(255,255,255,.05);}
+  .seg button[aria-pressed="true"]{
+    color:#f4f9ff;
+    background:linear-gradient(180deg,rgba(143,201,255,.23),rgba(143,201,255,.12));
+    box-shadow:inset 0 0 0 1px rgba(143,201,255,.28);
+  }
+  .seg button:focus-visible{outline:1px solid rgba(160,210,255,.8);outline-offset:-1px;}
+
+  /* 滑杆 */
+  .sr{display:grid;grid-template-columns:34px 1fr 38px;align-items:center;gap:10px;height:27px;}
+  .sr > span{font-size:11px;color:rgba(208,229,250,.74);letter-spacing:.04em;}
+  .sr > em{font-style:normal;font-size:10.5px;color:rgba(186,213,240,.44);
+    text-align:right;font-variant-numeric:tabular-nums;}
+  input[type=range]{-webkit-appearance:none;appearance:none;
+    width:100%;height:16px;margin:0;padding:0;background:transparent;cursor:pointer;outline:none;}
+  input[type=range]::-webkit-slider-runnable-track{height:3px;border-radius:2px;
+    background:linear-gradient(90deg,#82c4ff 0%,#82c4ff var(--p,50%),
+      rgba(150,195,245,.17) var(--p,50%),rgba(150,195,245,.17) 100%);}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;
+    width:11px;height:11px;margin-top:-4px;border-radius:50%;background:#e2f2ff;
+    box-shadow:0 0 0 1px rgba(120,180,240,.55),0 0 10px rgba(130,190,255,.75);
+    transition:transform .14s ease;}
+  input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.18);}
+  input[type=range]:active::-webkit-slider-thumb{transform:scale(1.28);}
+  input[type=range]::-moz-range-track{height:3px;border-radius:2px;background:rgba(150,195,245,.17);}
+  input[type=range]::-moz-range-progress{height:3px;border-radius:2px;background:#82c4ff;}
+  input[type=range]::-moz-range-thumb{width:11px;height:11px;border:0;border-radius:50%;
+    background:#e2f2ff;box-shadow:0 0 10px rgba(130,190,255,.75);}
+
+  /* 动作按钮 */
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+  .btn{display:flex;align-items:center;gap:7px;
+    -webkit-appearance:none;appearance:none;font:inherit;font-size:11.5px;letter-spacing:.05em;
+    color:rgba(212,232,251,.82);text-align:left;
+    background:rgba(255,255,255,.035);border:1px solid rgba(150,200,255,.11);
+    border-radius:9px;padding:9px 9px;cursor:pointer;
+    transition:background .18s,border-color .18s,color .18s;}
+  .btn::before{content:"";flex:0 0 5px;width:5px;height:5px;border-radius:50%;
+    background:rgba(190,215,240,.22);transition:background .18s,box-shadow .18s;}
+  .btn:hover{background:rgba(150,200,255,.09);border-color:rgba(150,200,255,.24);color:#fff;}
+  .btn[aria-pressed="true"]{color:#eef8ff;background:rgba(143,201,255,.13);border-color:rgba(143,201,255,.30);}
+  .btn[aria-pressed="true"]::before{background:#9ad1ff;box-shadow:0 0 9px rgba(143,201,255,.95);}
+  .btn.plain::before{display:none;}
+  .btn:focus-visible{outline:1px solid rgba(160,210,255,.8);outline-offset:1px;}
+
+  .foot{margin-top:10px;font-size:9.5px;letter-spacing:.10em;color:rgba(186,213,240,.30);
+    text-align:center;line-height:1.7;}
+
+  /* 首次提示 */
+  #tip{position:fixed;left:50%;bottom:max(28px,calc(env(safe-area-inset-bottom) + 12px));
+    z-index:7;transform:translate(-50%,10px);
+    padding:8px 15px;border-radius:999px;
+    background:rgba(8,19,33,.58);border:1px solid rgba(150,200,255,.16);
+    -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
+    font-size:10.5px;letter-spacing:.14em;color:rgba(220,237,253,.78);
+    opacity:0;pointer-events:none;
+    transition:opacity .7s ease,transform .7s ease;}
+  #tip.show{opacity:1;transform:translate(-50%,0);}
+
+  /* 加载 / 错误 */
+  #loader{position:fixed;inset:0;z-index:9;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;
+    background:linear-gradient(180deg,#060c16 0%,#0a1424 100%);
+    color:#cfe2f6;font-size:12px;letter-spacing:.30em;
+    transition:opacity .9s ease;}
+  #loader.gone{opacity:0;pointer-events:none;}
+  #loader .bar{width:118px;height:1px;background:rgba(180,220,255,.14);overflow:hidden;border-radius:1px;}
+  #loader .bar i{display:block;width:38%;height:100%;background:#9ad1ff;border-radius:1px;
+    animation:sw 1.15s cubic-bezier(.4,0,.6,1) infinite;}
+  @keyframes sw{0%{transform:translateX(-110%);}100%{transform:translateX(330%);}}
+  #err{position:fixed;inset:0;z-index:10;display:none;align-items:center;justify-content:center;
+    background:#0a1220;color:#ff9c9c;font-size:13px;padding:40px;text-align:center;
+    line-height:2;white-space:pre-wrap;overflow:auto;}
+
+  /* 截图 / 纯净模式：#clean 或 #nohud */
+  html.clean #dock,html.clean #tip{display:none !important;}
+
+  /* 窄屏 / 竖屏：底部抽屉 */
+  @media (max-width:540px){
+    #dock{left:12px;right:12px;align-items:flex-end;}
+    .panel{width:100%;max-height:min(72vh,calc(100vh - 88px));}
+    .foot{display:none;}
+  }
+  @media (max-height:620px){
+    .panel{max-height:calc(100vh - 84px);}
+  }
+  @media (prefers-reduced-motion:reduce){
+    .panel,.gear,.seg button,.btn,#tip{transition-duration:.01ms !important;}
+  }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div class="vig"></div>
+
+<div id="dock">
+  <section id="panel" class="panel" role="dialog" aria-label="海洋设置" aria-modal="false" aria-hidden="true">
+    <div class="ph">
+      <div class="t">海洋 · 设置</div>
+      <button id="close" class="x" type="button" aria-label="收起设置" title="收起">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+
+    <div class="g first">
+      <div class="cap">时 刻</div>
+      <div id="segTime" class="seg" role="group" aria-label="时刻">
+        <button type="button" data-i="0" aria-pressed="true">正午</button>
+        <button type="button" data-i="1" aria-pressed="false">黄昏</button>
+        <button type="button" data-i="2" aria-pressed="false">极夜</button>
+      </div>
+    </div>
+
+    <div class="g">
+      <div class="cap">波 浪</div>
+      <div class="sr"><span>波高</span><input id="s_amplitude"  type="range" min="0"   max="2.5" step="0.05" value="1"><em id="v_amplitude">1.00</em></div>
+      <div class="sr"><span>波长</span><input id="s_scale"      type="range" min="0.4" max="2.5" step="0.05" value="1"><em id="v_scale">1.00</em></div>
+      <div class="sr"><span>波峰</span><input id="s_choppiness" type="range" min="0"   max="1.8" step="0.05" value="1"><em id="v_choppiness">1.00</em></div>
+      <div class="sr"><span>波速</span><input id="s_speed"      type="range" min="0"   max="2.5" step="0.05" value="1"><em id="v_speed">1.00</em></div>
+      <div class="sr"><span>浪向</span><input id="s_turn"       type="range" min="-1.6" max="1.6" step="0.05" value="0"><em id="v_turn">+0°</em></div>
+      <div class="sr"><span>浪群</span><input id="s_group"      type="range" min="0"   max="1"   step="0.05" value="0.75"><em id="v_group">0.75</em></div>
+      <div class="sr"><span>白沫</span><input id="s_foam"       type="range" min="0"   max="2"   step="0.05" value="1"><em id="v_foam">1.00</em></div>
+      <div class="sr"><span>极光</span><input id="s_aurora"     type="range" min="0"   max="2"   step="0.05" value="1"><em id="v_aurora">1.00</em></div>
+      <div class="sr"><span>星空</span><input id="s_stars"      type="range" min="0"   max="2"   step="0.05" value="1"><em id="v_stars">1.00</em></div>
+    </div>
+
+    <div class="g">
+      <div class="cap">场 景</div>
+      <div class="grid">
+        <button id="bPause" class="btn" type="button" aria-pressed="false"><span class="l">定格波浪</span></button>
+        <button id="bOrbit" class="btn" type="button" aria-pressed="false"><span class="l">自动巡航</span></button>
+        <button id="bAim"   class="btn plain" type="button"><span class="l">对准太阳</span></button>
+        <button id="bReset" class="btn plain" type="button"><span class="l">恢复默认</span></button>
+      </div>
+    </div>
+
+    <div class="g">
+      <div class="cap">画 质</div>
+      <div id="segQ" class="seg" role="group" aria-label="画质">
+        <button type="button" data-q="auto" aria-pressed="true" title="按帧率自动调整渲染分辨率">自动</button>
+        <button type="button" data-q="high" aria-pressed="false" title="原生 / 超采样，最清晰">高清</button>
+        <button type="button" data-q="eco"  aria-pressed="false" title="降低分辨率，省电优先">省电</button>
+      </div>
+    </div>
+
+    <div class="foot">点击面板外收起</div>
+  </section>
+
+  <button id="gear" class="gear" type="button" aria-label="打开海洋设置" aria-expanded="false" title="海洋设置">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.55" stroke-linecap="round">
+      <path d="M3.2 7.5h8.1M16.5 7.5h4.3M3.2 16.5h4.1M12.5 16.5h8.3"/>
+      <circle cx="14" cy="7.5" r="2.3"/>
+      <circle cx="9" cy="16.5" r="2.3"/>
+    </svg>
+  </button>
+</div>
+
+<div id="tip">右下角 ⚙ 打开海洋设置</div>
+
+<div id="loader"><span>正在生成海面</span><span class="bar"><i></i></span></div>
+<div id="err"></div>
+
+<!-- ============================================================= 共用 GLSL -->
+<script id="glsl-common" type="x-shader/x-fragment">
+uniform float uTime;
+uniform vec3  uSunDir;
+uniform vec3  uSunColor;
+uniform vec3  uZenith;
+uniform vec3  uHorizon;
+uniform vec3  uGround;
+uniform float uStars;
+uniform float uAurora;
+
+/* ------------------------------------------------------------ hash & noise */
+float hash21(vec2 p){
+  p = fract(p * vec2(123.34, 345.45));
+  p += dot(p, p + 34.345);
+  return fract(p.x * p.y);
+}
+float vnoise(vec2 p){
+  vec2 i = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash21(i),                 hash21(i + vec2(1.0, 0.0)), f.x),
+             mix(hash21(i + vec2(0.0,1.0)), hash21(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+float fbm(vec2 p){                       /* 5 octaves — clouds */
+  float s = 0.0, a = 0.5;
+  mat2 rot = mat2(0.80, 0.60, -0.60, 0.80);
+  for (int i = 0; i < 5; i++){ s += a * vnoise(p); p = rot * p * 2.03; a *= 0.5; }
+  return s;
+}
+float fbm3(vec2 p){                      /* 3 octaves — ripples & foam */
+  float s = 0.0, a = 0.5;
+  mat2 rot = mat2(0.80, 0.60, -0.60, 0.80);
+  for (int i = 0; i < 3; i++){ s += a * vnoise(p); p = rot * p * 2.07; a *= 0.5; }
+  return s;
+}
+
+/* -------------------------------------------------------------------- sky */
+float starField(vec3 d){
+  vec2 uv = d.xz / max(abs(d.y), 0.16) * 3.4;
+  vec2 g  = floor(uv);
+  float h = hash21(g + 4.13);
+  if (h < 0.9570) return 0.0;
+  vec2  c  = g + vec2(0.18) + vec2(hash21(g + 1.7), hash21(g + 3.3)) * 0.64;
+  float tw = 0.55 + 0.45 * sin(uTime * 2.1 + h * 90.0);
+  return smoothstep(0.17, 0.0, length(uv - c)) * tw * smoothstep(0.05, 0.5, d.y);
+}
+
+/* ------------------------------------------------------------------ aurora */
+vec3 aurora(vec3 d){
+  if (d.y < 0.010) return vec3(0.0);
+  float az    = atan(d.z, d.x);
+  float drift = uTime * 0.013;
+
+  /* 各向异性噪声：横向密集、纵向拉长 → 天然的光幕与光柱，而不是等距条纹 */
+  vec2  p = vec2(az * 8.5 + drift, d.y * 0.85 - drift * 0.30);
+  float n = fbm(p) * 0.80 + fbm(vec2(az * 27.0 - drift * 1.8, d.y * 2.2)) * 0.30;
+
+  /* 纵向轮廓：贴着地平线亮起、向上渐隐，上沿随方位高低起伏 */
+  float wob  = fbm(vec2(az * 1.5 + drift * 0.6, 3.1));
+  float top  = 0.20 + 0.24 * wob;
+  float prof = smoothstep(0.008, 0.070, d.y) * (1.0 - smoothstep(top * 0.40, top, d.y));
+
+  float i = smoothstep(0.44, 0.94, n) * prof;
+  vec3  col = mix(vec3(0.16, 0.95, 0.50), vec3(0.28, 0.70, 1.00), smoothstep(0.04, 0.34, d.y));
+  col = mix(col, vec3(0.80, 0.32, 0.92), smoothstep(0.12, 0.34, d.y) * 0.40);
+  return col * i * uAurora * 0.34;
+}
+
+vec3 skyColor(vec3 d){
+  float up = clamp(d.y, -1.0, 1.0);
+  vec3  col = mix(uHorizon, uZenith, pow(clamp(up, 0.0, 1.0), 0.40));
+
+  float sd = max(dot(d, uSunDir), 0.0);
+  col += uSunColor * (pow(sd, 5.0) * 0.16 + pow(sd, 48.0) * 0.42);
+
+  if (d.y > 0.008){
+    if (uStars > 0.001) col += vec3(0.86, 0.92, 1.0) * starField(d) * uStars;
+
+    vec2  uv = (d.xz * (1000.0 / d.y)) * 0.00052 + vec2(uTime * 0.0030, uTime * 0.0012);
+    float big  = fbm(uv * 1.15);
+    float fine = fbm(uv * 3.10 + 17.0);
+    float cov  = smoothstep(0.66, 1.10, big * 0.72 + fine * 0.42);
+    float lit  = smoothstep(0.22, 1.00, fine * 0.70 + big * 0.42);
+    vec3  base = mix(uHorizon, uZenith, pow(clamp(d.y, 0.0, 1.0), 0.40));
+    vec3  cc   = mix(base * 0.92, vec3(1.06, 1.04, 1.01), lit * 0.88);
+    cc = mix(cc, uSunColor * 1.05 + 0.05, pow(sd, 8.0) * 0.55);
+    col = mix(col, cc, cov * 0.74);
+    col += aurora(d) * (1.0 - cov * 0.7);
+  }
+
+  col += uSunColor * pow(sd, 3000.0) * 9.0;                 /* sun / moon disc */
+  return mix(col, uGround, smoothstep(0.0, -0.06, up));     /* below horizon haze */
+}
+
+/* ---------------------------------------------------------------- finish */
+vec3 finish(vec3 col){
+  col *= 0.98;
+  col = clamp((col * (2.51 * col + 0.03)) / (col * (2.43 * col + 0.59) + 0.14), 0.0, 1.0);
+  col = pow(col, vec3(0.4545));
+  col += (hash21(gl_FragCoord.xy + fract(uTime) * 91.7) - 0.5) / 255.0;
+  return col;
+}
+</script>
+
+<!-- ============================================================= 海面 pass -->
+<script id="vs-ocean" type="x-shader/x-vertex">
+precision highp float;
+attribute vec2 aPos;                     // world XZ on the radial ocean grid
+uniform mat4 uProj, uView;
+uniform float uTime;
+uniform float uWaveTime;
+uniform float uGroup;                    // 0 = uniform swell, 1 = strong wave sets
+uniform vec4 uDir[8];                    // xy = wave direction
+uniform vec4 uPar[8];                    // x=k  y=omega  z=steepness Q  w=amplitude A
+varying vec3  vWorld;
+varying vec3  vNormal;
+varying float vHeight;
+varying float vFold;
+
+void main(){
+  vec3 disp = vec3(aPos.x, 0.0, aPos.y);
+  vec3 tang = vec3(1.0, 0.0, 0.0);       // analytic tangent  (+x)
+  vec3 bino = vec3(0.0, 0.0, 1.0);       // analytic binormal (+z)
+
+  for (int i = 0; i < 8; i++){
+    vec2  d  = uDir[i].xy;
+    float k  = uPar[i].x;
+    float om = uPar[i].y;
+    float Q  = uPar[i].z;
+    float A  = uPar[i].w;
+
+    /* travelling envelope: swells arrive in sets instead of a uniform chop */
+    float env = 1.0 + uGroup * sin(dot(aPos, vec2(0.0041, 0.0027))
+                                   + float(i) * 2.10 + uWaveTime * 0.05);
+    A *= env;
+
+    float f = k * dot(d, aPos) - om * uWaveTime;
+    float c = cos(f), s = sin(f);
+
+    disp.x += Q * A * d.x * c;
+    disp.z += Q * A * d.y * c;
+    disp.y += A * s;
+
+    float WA = k * A;
+    tang += vec3(-Q * d.x * d.x * WA * s, d.x * WA * c, -Q * d.x * d.y * WA * s);
+    bino += vec3(-Q * d.x * d.y * WA * s, d.y * WA * c, -Q * d.y * d.y * WA * s);
+  }
+
+  vec3  N   = normalize(cross(bino, tang));
+  float jac = tang.x * bino.z - tang.z * bino.x;   // 1 = flat, < 1 = folding crest
+
+  vWorld  = disp;
+  vNormal = N;
+  vHeight = disp.y;
+  vFold   = clamp(1.0 - jac, 0.0, 1.0);
+  gl_Position = uProj * uView * vec4(disp, 1.0);
+}
+</script>
+
+<script id="fs-ocean" type="x-shader/x-fragment">
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+varying vec3  vWorld;
+varying vec3  vNormal;
+varying float vHeight;
+varying float vFold;
+uniform vec3  uCamPos;
+uniform vec3  uDeep;
+uniform vec3  uShallow;
+uniform float uFoam;
+uniform float uAmpScale;
+/*__COMMON__*/
+
+void main(){
+  vec3  N = normalize(vNormal);
+  vec3  V = normalize(uCamPos - vWorld);
+  float dist = length(uCamPos - vWorld);
+
+  /* ripple detail: the frequency slides down with distance, so the near water
+     stays crisp without turning into static out at the horizon */
+  float lod = mix(0.90, 0.13, smoothstep(12.0, 420.0, dist));
+  vec2  duv = vWorld.xz * lod + vec2(uTime * 0.030, uTime * 0.013) * lod;
+  float e   = 0.085;
+  float h0  = fbm3(duv);
+  float hx  = fbm3(duv + vec2(e, 0.0));
+  float hz  = fbm3(duv + vec2(0.0, e));
+  vec3  dn  = normalize(vec3(-(hx - h0) / e, 1.0, -(hz - h0) / e) * vec3(0.16, 1.0, 0.16));
+  float rough = 0.30 + 0.55 * (1.0 - smoothstep(70.0, 900.0, dist));
+  N = normalize(N + (dn - vec3(0.0, 1.0, 0.0)) * rough);
+
+  float ndv  = clamp(dot(N, V), 0.0, 1.0);
+  float fres = 0.02 + 0.98 * pow(1.0 - ndv, 5.0);
+
+  /* body colour: teal over the crests, ink in the troughs */
+  float depth = clamp(0.42 + vHeight * 0.30 / uAmpScale, 0.0, 1.0);
+  vec3  body  = mix(uShallow, uDeep, depth);
+  float sss   = pow(clamp(vHeight / (uAmpScale * 1.25) * 0.5 + 0.5, 0.0, 1.0), 4.0)
+              * pow(1.0 - ndv, 2.6);
+  body += vec3(0.10, 0.30, 0.48) * sss * 0.32 * uSunColor * (1.0 - fres);
+
+  vec3 refl = skyColor(reflect(-V, N));
+  vec3 col  = mix(body, mix(refl, uShallow * 0.85, 0.10), fres);
+
+  /* sun specular: broad sheen, then two glitter lobes */
+  float nh   = clamp(dot(N, normalize(V + uSunDir)), 0.0, 1.0);
+  float spec = pow(nh, 160.0) * 0.90 + pow(nh, 2200.0) * 3.4 + pow(nh, 11000.0) * 14.0;
+  col += uSunColor * spec * (0.26 + 0.74 * fres) * 0.42;
+
+  /* whitecaps: only where the crest actually folds over, and only in patches */
+  float crest = smoothstep(0.76, 1.00, vHeight / (uAmpScale * 0.90));
+  float foldN = clamp(vFold * 1.9, 0.0, 1.2);
+  float patch = fbm3(vWorld.xz * 0.026 + vec2(uTime * 0.006, uTime * 0.003));
+  float flod = mix(1.00, 0.15, smoothstep(60.0, 900.0, dist));
+  float fn    = fbm3(vWorld.xz * 0.170 * flod + vec2(uTime * 0.045, uTime * 0.020));
+  float mask  = smoothstep(0.28, 0.72, patch);
+  float foam  = smoothstep(0.78, 1.16, foldN * 0.58 + crest * 0.56 + (fn - 0.5) * 0.55);
+  foam *= mask * mask * uFoam * 1.08;
+  foam *= 1.0 - smoothstep(180.0, 1500.0, dist) * 0.88;
+
+  vec3 foamCol = vec3(0.90, 0.94, 1.00) * (0.42 + 0.78 * max(dot(N, uSunDir), 0.0))
+               + uSunColor * 0.12 * max(dot(N, uSunDir), 0.0);
+  col = mix(col, foamCol, clamp(foam, 0.0, 0.82));
+
+  /* aerial perspective so the plane edge melts into the sky */
+  /* 远处压成一条深色水线，地平线才会干净地切在天空上，而不是糊成一片 */
+  vec3 far = uHorizon * 0.34 + uDeep * 1.9 + uSunColor * 0.05;
+  col = mix(col, far, smoothstep(1500.0, 5200.0, dist) * 0.88);
+
+  gl_FragColor = vec4(finish(col), 1.0);
+}
+</script>
+
+<!-- =============================================================== 天空 pass -->
+<script id="vs-sky" type="x-shader/x-vertex">
+precision highp float;
+attribute vec2 aClip;
+uniform vec3  uCamRight, uCamUp, uCamFwd;
+uniform float uTanHalf, uAspect;
+varying vec3 vRay;
+void main(){
+  vRay = uCamFwd + uCamRight * (aClip.x * uTanHalf * uAspect)
+                 + uCamUp    * (aClip.y * uTanHalf);
+  gl_Position = vec4(aClip, 0.9999, 1.0);   /* only fills pixels the sea missed */
+}
+</script>
+
+<script id="fs-sky" type="x-shader/x-fragment">
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+varying vec3 vRay;
+/*__COMMON__*/
+void main(){
+  gl_FragColor = vec4(finish(skyColor(normalize(vRay))), 1.0);
+}
+</script>
+
+<script>
+(function () {
+  'use strict';
+
+  var canvas = document.getElementById('gl');
+  var loader = document.getElementById('loader');
+  function fail(msg) {
+    var e = document.getElementById('err');
+    e.style.display = 'flex'; e.textContent = msg;
+    if (loader) loader.classList.add('gone');
+  }
+
+  var gl = canvas.getContext('webgl', {
+    antialias: true, alpha: false, depth: true, stencil: false,
+    premultipliedAlpha: false, preserveDrawingBuffer: false,
+    powerPreference: 'high-performance'
+  }) || canvas.getContext('experimental-webgl');
+  if (!gl) { fail('你的浏览器无法创建 WebGL 上下文。\n请用 Chrome / Edge 打开本文件。'); return; }
+
+  /* 显卡驱动重启时不要留下黑屏 */
+  canvas.addEventListener('webglcontextlost', function (ev) { ev.preventDefault(); }, false);
+  canvas.addEventListener('webglcontextrestored', function () { location.reload(); }, false);
+
+  function txt(id) { return document.getElementById(id).textContent; }
+  var COMMON = txt('glsl-common');
+
+  function compile(type, src, label) {
+    var s = gl.createShader(type);
+    gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+      throw new Error(label + ' shader:\n' + gl.getShaderInfoLog(s));
+    }
+    return s;
+  }
+  function build(vsId, fsId) {
+    var fsSrc = txt(fsId).replace('/*__COMMON__*/', COMMON);
+    var p = gl.createProgram();
+    gl.attachShader(p, compile(gl.VERTEX_SHADER,   txt(vsId), vsId));
+    gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fsSrc,     fsId));
+    gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
+      throw new Error('link ' + vsId + ':\n' + gl.getProgramInfoLog(p));
+    }
+    return p;
+  }
+
+  var oceanProg, skyProg;
+  try { oceanProg = build('vs-ocean', 'fs-ocean'); skyProg = build('vs-sky', 'fs-sky'); }
+  catch (err) { fail(String(err.message || err)); return; }
+
+  function uloc(p, names) {
+    var o = {};
+    names.forEach(function (n) { o[n] = gl.getUniformLocation(p, n); });
+    return o;
+  }
+  var OC = uloc(oceanProg, ['uProj','uView','uTime','uWaveTime','uGroup','uCamPos','uSunDir','uSunColor',
+                            'uZenith','uHorizon','uGround','uStars','uAurora','uDeep','uShallow',
+                            'uFoam','uAmpScale']);
+  OC.uDir = gl.getUniformLocation(oceanProg, 'uDir[0]');
+  OC.uPar = gl.getUniformLocation(oceanProg, 'uPar[0]');
+  var SK = uloc(skyProg, ['uTime','uSunDir','uSunColor','uZenith','uHorizon','uGround','uStars','uAurora',
+                          'uCamRight','uCamUp','uCamFwd','uTanHalf','uAspect']);
+
+  /* --------------------------------------------------------------- ocean mesh */
+  /* polar grid, dense at the centre: 201 × 321 = 64521 verts (< 65536, uint16) */
+  var RINGS = 200, SEGS = 320, R_MAX = 9000.0, triCount = 0;
+  var oceanVBO = gl.createBuffer(), oceanIBO = gl.createBuffer();
+  (function buildMesh() {
+    var verts = [], i, j;
+    for (i = 0; i <= RINGS; i++) {
+      var r = R_MAX * Math.pow(i / RINGS, 1.85);
+      for (j = 0; j <= SEGS; j++) {
+        var a = (j / SEGS) * Math.PI * 2.0;
+        verts.push(Math.cos(a) * r, Math.sin(a) * r);
+      }
+    }
+    var idx = new Uint16Array(RINGS * SEGS * 6), w = 0, stride = SEGS + 1;
+    for (i = 0; i < RINGS; i++) {
+      for (j = 0; j < SEGS; j++) {
+        var a0 = i * stride + j, b0 = a0 + 1, c0 = a0 + stride, d0 = c0 + 1;
+        idx[w++] = a0; idx[w++] = c0; idx[w++] = b0;
+        idx[w++] = b0; idx[w++] = c0; idx[w++] = d0;
+      }
+    }
+    triCount = idx.length;
+    gl.bindBuffer(gl.ARRAY_BUFFER, oceanVBO);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(verts), gl.STATIC_DRAW);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, oceanIBO);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW);
+  })();
+
+  var skyVBO = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, skyVBO);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+
+  /* ------------------------------------------------------------------- waves */
+  var DEFAULTS = {
+    amplitude:  1.00,   // 波高倍率
+    scale:      1.00,   // 波长倍率（>1 更舒缓，<1 更细碎）
+    choppiness: 1.00,   // 波峰尖锐度
+    speed:      1.00,   // 波速倍率
+    turn:       0.00,   // 整体浪向旋转（弧度）
+    group:      0.75,   // 浪群强度：0 = 均匀浪，1 = 明显的涌浪组
+    foam:       1.00,   // 白沫倍率
+    aurora:     1.00,   // 极光倍率
+    stars:      1.00    // 星空亮度
+  };
+  var cfg = {};
+  Object.keys(DEFAULTS).forEach(function (k) { cfg[k] = DEFAULTS[k]; });
+
+  var BASE_WAVE = [            /* 基准波长, steepness, 方向角 —— 长短交错、方向错开，海面才不会呆板 */
+    [210.0, 0.055, 0.22],      /* 远洋长涌 */
+    [128.0, 0.120, 0.72],
+    [ 74.0, 0.110, 0.48],
+    [ 44.0, 0.095, 0.96],
+    [ 26.0, 0.085, 0.30],
+    [ 15.0, 0.070, 0.66],
+    [  8.5, 0.060, 1.12],
+    [  5.2, 0.045, 0.90]       /* 近处细碎浪 */
+  ];
+  var AMP = 0.62, ampSum = 0;
+  var uDirArr = new Float32Array(32), uParArr = new Float32Array(32);
+
+  function rebuildWaves() {
+    ampSum = 0;
+    var sc = Math.max(0.15, cfg.scale), q = Math.max(0.0, cfg.choppiness);
+    for (var i = 0; i < BASE_WAVE.length; i++) {
+      var w   = BASE_WAVE[i];
+      var k   = 2 * Math.PI / (w[0] * sc);      /* 深水色散 */
+      var om  = Math.sqrt(9.81 * k);
+      var A   = (w[1] * q / k) * AMP * cfg.amplitude;
+      var ang = w[2] + cfg.turn;
+      uDirArr[i * 4]     = Math.cos(ang);
+      uDirArr[i * 4 + 1] = Math.sin(ang);
+      uParArr[i * 4]     = k;
+      uParArr[i * 4 + 1] = om;
+      uParArr[i * 4 + 2] = w[1] * q;
+      uParArr[i * 4 + 3] = A;
+      ampSum += A;
+    }
+  }
+
+  /* ----------------------------------------------------------------- presets */
+  /* view = [相机方位角, 仰角, 距离] —— 相机方位 = 太阳方位 + π - 0.42，
+     这样镜头朝着太阳/月亮看过去，海面上才会出现那条随浪闪动的光路 */
+  var PRESETS = [
+    { name: '正午', stars: 0.0,  foam: 0.95, aurora: 0.0, view: [3.697, 0.115, 74],
+      sun: [ 0.66, 0.28, 0.44], sunCol: [1.00, 0.97, 0.90],
+      zenith: [0.018,0.085,0.320], horizon: [0.56,0.71,0.88], ground: [0.48,0.62,0.79],
+      deep: [0.0015,0.024,0.058], shallow: [0.013,0.155,0.225] },
+    { name: '黄昏', stars: 0.22, foam: 0.85, aurora: 0.0, view: [4.622, 0.075, 70],
+      sun: [ 0.88, 0.13,-0.30], sunCol: [1.40,0.60,0.24],
+      zenith: [0.022,0.055,0.170], horizon: [0.95,0.50,0.24], ground: [0.62,0.33,0.18],
+      deep: [0.014,0.020,0.045], shallow: [0.075,0.170,0.235] },
+    { name: '极夜', stars: 0.95, foam: 0.55, aurora: 1.0, view: [2.069, 0.100, 74],
+      sun: [-0.42, 0.34, 0.55], sunCol: [0.40,0.56,0.95],
+      zenith: [0.005,0.013,0.046], horizon: [0.042,0.080,0.200], ground: [0.022,0.040,0.098],
+      deep: [0.0010,0.0035,0.017], shallow: [0.004,0.028,0.108] }
+  ];
+  var VEC = ['sun','sunCol','zenith','horizon','ground','deep','shallow'];
+  var cur = { sunN: [0,1,0] }, targetIdx = 0;
+  function snap(p) {
+    VEC.forEach(function (k) { cur[k] = p[k].slice(); });
+    cur.foam = p.foam * cfg.foam; cur.stars = p.stars * cfg.stars; cur.aurora = p.aurora * cfg.aurora;
+  }
+  function lerpTo(t, dt) {
+    var s = 1 - Math.pow(0.0025, dt * 1.6);
+    VEC.forEach(function (k) { for (var i = 0; i < 3; i++) cur[k][i] += (t[k][i] - cur[k][i]) * s; });
+    cur.foam   += (t.foam   * cfg.foam   - cur.foam)   * s;
+    cur.stars  += (t.stars  * cfg.stars  - cur.stars)  * s;
+    cur.aurora += (t.aurora * cfg.aurora - cur.aurora) * s;
+  }
+
+  /* ------------------------------------------------------------------ camera */
+  var cam = { az: 3.697, el: 0.115, dist: 74, taz: 3.697, tel: 0.115, tdist: 74 };
+  var auto = false, paused = false, clock = 0, waveClock = 0;
+
+  function aimAt(i, instant) {
+    var v = PRESETS[i].view;
+    cam.taz = v[0]; cam.tel = v[1]; cam.tdist = v[2];
+    if (instant) { cam.az = v[0]; cam.el = v[1]; cam.dist = v[2]; }
+  }
+
+  /* ------------------------------------------------- save / share fragments */
+  var SKEY = 'ocean.wallpaper.v1';
+  var saved = null;
+  try { saved = JSON.parse(localStorage.getItem(SKEY) || 'null'); } catch (e) { saved = null; }
+
+  var H = location.hash || '';
+  var CLEAN = /(?:^|[#&])(?:clean|nohud)\b/.test(H);
+  if (CLEAN) document.documentElement.classList.add('clean');
+
+  var m;
+  if ((m = /(?:^|[#&])p=([0-9]+)/.exec(H))) {
+    targetIdx = Math.min(PRESETS.length - 1, Math.max(0, parseInt(m[1], 10) - 1));
+  } else if (saved && typeof saved.preset === 'number' &&
+             saved.preset >= 0 && saved.preset < PRESETS.length) {
+    targetIdx = saved.preset;
+  }
+  if (saved && saved.cfg) {
+    Object.keys(DEFAULTS).forEach(function (k) {
+      if (typeof saved.cfg[k] === 'number' && isFinite(saved.cfg[k])) cfg[k] = saved.cfg[k];
+    });
+  }
+  rebuildWaves();
+  snap(PRESETS[targetIdx]);
+  aimAt(targetIdx, true);
+
+  if ((m = /(?:^|[#&])c=([0-9.]+)/.exec(H))) clock = parseFloat(m[1]);
+  if (/(?:^|[#&])auto\b/.test(H)) auto = true;
+  else if (saved && saved.auto === true) auto = true;
+
+  var camPos = new Float32Array(3);
+  var FOV = 1.13, TANH = Math.tan(FOV / 2);
+  var RIGHT = [1,0,0], UP = [0,1,0], FWD = [0,0,-1];
+
+  function perspective(fovy, aspect, near, far) {
+    var f = 1 / Math.tan(fovy / 2), nf = 1 / (near - far);
+    return new Float32Array([f/aspect,0,0,0, 0,f,0,0, 0,0,(far+near)*nf,-1, 0,0,2*far*near*nf,0]);
+  }
+  function lookAt(e, c, upv) {
+    var zx=e[0]-c[0], zy=e[1]-c[1], zz=e[2]-c[2], zl=Math.hypot(zx,zy,zz)||1;
+    zx/=zl; zy/=zl; zz/=zl;
+    var xx=upv[1]*zz-upv[2]*zy, xy=upv[2]*zx-upv[0]*zz, xz=upv[0]*zy-upv[1]*zx, xl=Math.hypot(xx,xy,xz)||1;
+    xx/=xl; xy/=xl; xz/=xl;
+    var yx=zy*xz-zz*xy, yy=zz*xx-zx*xz, yz=zx*xy-zy*xx;
+    return new Float32Array([
+      xx,yx,zx,0, xy,yy,zy,0, xz,yz,zz,0,
+      -(xx*e[0]+xy*e[1]+xz*e[2]), -(yx*e[0]+yy*e[1]+yz*e[2]), -(zx*e[0]+zy*e[1]+zz*e[2]), 1]);
+  }
+  function updateCam(dt) {
+    if (auto) cam.taz += dt * 0.017;
+    var k = 1 - Math.pow(0.0009, Math.max(dt, 1e-5));
+    cam.az   += (cam.taz   - cam.az)   * k;
+    cam.el   += (cam.tel   - cam.el)   * k;
+    cam.dist += (cam.tdist - cam.dist) * k;
+
+    var r = cam.dist, cy = Math.cos(cam.el), sy = Math.sin(cam.el);
+    camPos[0] = Math.sin(cam.az) * r * cy;
+    camPos[1] = 3.4 + r * sy;
+    camPos[2] = Math.cos(cam.az) * r * cy;
+
+    var look = [camPos[0] * 0.06, 1.8 + r * sy * 0.30, camPos[2] * 0.06];
+    var mv = lookAt(camPos, look, [0, 1, 0]);
+    RIGHT = [mv[0], mv[4], mv[8]];
+    UP    = [mv[1], mv[5], mv[9]];
+    FWD   = [-mv[2], -mv[6], -mv[10]];
+    gl.uniformMatrix4fv(OC.uProj, false, perspective(FOV, canvas.width / canvas.height, 0.35, 26000));
+    gl.uniformMatrix4fv(OC.uView, false, mv);
+  }
+
+  /* ------------------------------------------------------ quality / resize */
+  var QUALITY = {
+    auto: { dpr: 1.50, cap: 12.0e6 },
+    high: { dpr: 1.50, cap: 12.0e6 },
+    eco:  { dpr: 0.75, cap: 2.2e6 },
+    shot: { dpr: 1.00, cap: 9.0e6 }         /* #clean 截图：原生 1:1，关掉自适应 */
+  };
+  var quality = CLEAN ? 'shot' : ((saved && QUALITY[saved.quality] && saved.quality !== 'shot') ? saved.quality : 'auto');
+  var devDpr = Math.min(window.devicePixelRatio || 1, 3);
+  var scale = 1;
+
+  function maxScale() { return Math.min(devDpr, QUALITY[quality].dpr); }
+
+  function resize(force) {
+    var w = Math.max(2, Math.round(window.innerWidth  * scale));
+    var h = Math.max(2, Math.round(window.innerHeight * scale));
+    var px = w * h;
+    if (px > QUALITY[quality].cap) {
+      var f = Math.sqrt(QUALITY[quality].cap / px);
+      w = Math.round(w * f); h = Math.round(h * f);
+    }
+    if (force || canvas.width !== w || canvas.height !== h) {
+      canvas.width = w; canvas.height = h;
+      gl.viewport(0, 0, w, h);
+    }
+  }
+
+  function setQuality(q) {
+    quality = QUALITY[q] ? q : 'auto';
+    scale = maxScale();
+    resize(true);
+    syncQualityUI();
+    save();
+  }
+
+  scale = maxScale();
+  window.addEventListener('resize', function () { resize(true); });
+  resize(true);
+
+  /* ------------------------------------------------------------ frame loop */
+  gl.enable(gl.DEPTH_TEST);
+  gl.depthFunc(gl.LEQUAL);
+  gl.clearColor(0.02, 0.04, 0.09, 1);
+
+  var oceanLoc = gl.getAttribLocation(oceanProg, 'aPos');
+  var skyLoc   = gl.getAttribLocation(skyProg,   'aClip');
+  var tPrev = performance.now(), acc = 0, frames = 0, hist = [], lastAdapt = 0;
+  /* 默认把海洋锁在 60 帧：高刷屏上不锁会跑到 120/165/240 帧，
+     画面看不出差别，GPU 却在白烧好几倍。Wallpaper Engine 会用它自己的上限覆盖。 */
+  var fpsLimit = 0, pausedByHide = false;
+
+  /* Wallpaper Engine 会把用户设置的帧率上限传进来；桌面浏览器里保持 0（不限制） */
+  window.wallpaperPropertyListener = {
+    applyGeneralProperties: function (props) {
+      if (props && typeof props.fps === 'number' && props.fps > 0) fpsLimit = props.fps;
+    }
+  };
+
+  document.addEventListener('visibilitychange', function () {
+    pausedByHide = document.hidden;
+    if (!pausedByHide) tPrev = performance.now();
+  });
+
+  function bindOcean() {
+    gl.bindBuffer(gl.ARRAY_BUFFER, oceanVBO);
+    gl.enableVertexAttribArray(oceanLoc);
+    gl.vertexAttribPointer(oceanLoc, 2, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, oceanIBO);
+  }
+  function bindSky() {
+    gl.bindBuffer(gl.ARRAY_BUFFER, skyVBO);
+    gl.enableVertexAttribArray(skyLoc);
+    gl.vertexAttribPointer(skyLoc, 2, gl.FLOAT, false, 0, 0);
+  }
+  function setShared(P) {
+    gl.uniform1f(P.uTime, clock);
+    gl.uniform3f(P.uSunDir, cur.sunN[0], cur.sunN[1], cur.sunN[2]);
+    gl.uniform3fv(P.uSunColor, cur.sunCol);
+    gl.uniform3fv(P.uZenith,  cur.zenith);
+    gl.uniform3fv(P.uHorizon, cur.horizon);
+    gl.uniform3fv(P.uGround,  cur.ground);
+    gl.uniform1f(P.uStars, cur.stars);
+    gl.uniform1f(P.uAurora, cur.aurora);
+  }
+
+  function frame(now) {
+    requestAnimationFrame(frame);
+    if (pausedByHide) { tPrev = now; return; }
+
+    var elapsed = now - tPrev;
+    if (fpsLimit > 0 && elapsed < 1000 / fpsLimit - 0.6) return;
+    var dt = Math.min(0.05, Math.max(0.00001, elapsed / 1000));
+    tPrev = now;
+
+    if (!paused) { clock += dt; waveClock += dt * cfg.speed; }
+    acc += dt; frames++;
+
+    if (acc > 0.5) {
+      var fps = frames / acc; acc = 0; frames = 0;
+      hist.push(fps); if (hist.length > 5) hist.shift();
+      /* 原来这里有一套"帧率低了就把画布缩小、帧率高了再放大"的自动降质循环：
+         每 2.6 秒判断一次，avg 在 44/57 之间来回穿 -> resize 反复重建画布，
+         表现就是隔一阵卡一下再恢复。用户明确不要降分辨率，整段停用。 */
+    }
+
+    lerpTo(PRESETS[targetIdx], dt);
+    var sl = Math.hypot(cur.sun[0], cur.sun[1], cur.sun[2]) || 1;
+    cur.sunN = [cur.sun[0] / sl, cur.sun[1] / sl, cur.sun[2] / sl];
+
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    /* ---- pass 1: the sea ---- */
+    gl.useProgram(oceanProg);
+    gl.depthMask(true);
+    updateCam(dt);
+    setShared(OC);
+    gl.uniform3fv(OC.uCamPos, camPos);
+    gl.uniform1f(OC.uWaveTime, waveClock);
+    gl.uniform1f(OC.uGroup, cfg.group);
+    gl.uniform4fv(OC.uDir, uDirArr);
+    gl.uniform4fv(OC.uPar, uParArr);
+    gl.uniform3fv(OC.uDeep,    cur.deep);
+    gl.uniform3fv(OC.uShallow, cur.shallow);
+    gl.uniform1f(OC.uFoam, cur.foam);
+    gl.uniform1f(OC.uAmpScale, Math.max(0.4, ampSum * 0.5));
+    bindOcean();
+    gl.drawElements(gl.TRIANGLES, triCount, gl.UNSIGNED_SHORT, 0);
+
+    /* ---- pass 2: the sky, only where the sea did not cover ---- */
+    gl.useProgram(skyProg);
+    gl.depthMask(false);
+    setShared(SK);
+    gl.uniform3fv(SK.uCamRight, RIGHT);
+    gl.uniform3fv(SK.uCamUp,    UP);
+    gl.uniform3fv(SK.uCamFwd,   FWD);
+    gl.uniform1f(SK.uTanHalf, TANH);
+    gl.uniform1f(SK.uAspect, canvas.width / canvas.height);
+    bindSky();
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.depthMask(true);
+  }
+
+  /* ============================================================== UI 绑定 */
+  var panelEl  = document.getElementById('panel');
+  var gearEl   = document.getElementById('gear');
+  var closeEl  = document.getElementById('close');
+  var tipEl    = document.getElementById('tip');
+  var bPause   = document.getElementById('bPause');
+  var bOrbit   = document.getElementById('bOrbit');
+  var bAim     = document.getElementById('bAim');
+  var bReset   = document.getElementById('bReset');
+  var timeBtns = Array.prototype.slice.call(document.querySelectorAll('#segTime button'));
+  var qualBtns = Array.prototype.slice.call(document.querySelectorAll('#segQ button'));
+  var open = false;
+
+  var SLIDERS = [
+    ['amplitude',  '波高'],
+    ['scale',      '波长'],
+    ['choppiness', '波峰'],
+    ['speed',      '波速'],
+    ['turn',       '浪向'],
+    ['group',      '浪群'],
+    ['foam',       '白沫'],
+    ['aurora',     '极光'],
+    ['stars',      '星空']
+  ];
+
+  function fmt(key, v) {
+    if (key === 'turn') {
+      var d = Math.round(v * 180 / Math.PI);
+      return (d >= 0 ? '+' : '') + d + '°';
+    }
+    return (+v).toFixed(2);
+  }
+
+  function paintRange(el) {
+    var min = parseFloat(el.min), max = parseFloat(el.max), v = parseFloat(el.value);
+    var p = max > min ? (v - min) / (max - min) * 100 : 50;
+    el.style.setProperty('--p', Math.max(0, Math.min(100, p)).toFixed(1) + '%');
+  }
+
+  function syncSliders() {
+    SLIDERS.forEach(function (s) {
+      var key = s[0];
+      var el = document.getElementById('s_' + key);
+      var out = document.getElementById('v_' + key);
+      if (!el) return;
+      el.value = cfg[key];
+      if (out) out.textContent = fmt(key, cfg[key]);
+      paintRange(el);
+    });
+  }
+
+  function syncTimeUI() {
+    timeBtns.forEach(function (b, i) {
+      b.setAttribute('aria-pressed', i === targetIdx ? 'true' : 'false');
+    });
+  }
+
+  function syncQualityUI() {
+    qualBtns.forEach(function (b) {
+      b.setAttribute('aria-pressed', b.getAttribute('data-q') === quality ? 'true' : 'false');
+    });
+  }
+
+  function syncToggles() {
+    bPause.setAttribute('aria-pressed', paused ? 'true' : 'false');
+    bPause.querySelector('.l').textContent = paused ? '继续流动' : '定格波浪';
+    bOrbit.setAttribute('aria-pressed', auto ? 'true' : 'false');
+  }
+
+  function syncAll() { syncSliders(); syncTimeUI(); syncQualityUI(); syncToggles(); }
+
+  /* 设置持久化（浏览器 localStorage；Wallpaper Engine 重启后仍在） */
+  var saveTimer = null;
+  function save() {
+    try {
+      localStorage.setItem(SKEY, JSON.stringify({
+        cfg: cfg, preset: targetIdx, auto: auto, quality: quality
+      }));
+    } catch (e) {}
+  }
+  function saveSoon() {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(save, 260);
+  }
+
+  /* 面板开合 */
+  var idleTimer = null;
+  function wake() {
+    document.body.classList.remove('idle');
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(function () {
+      if (!open) document.body.classList.add('idle');
+    }, 2800);
+  }
+  function openPanel() {
+    open = true;
+    panelEl.classList.add('open');
+    panelEl.setAttribute('aria-hidden', 'false');
+    gearEl.setAttribute('aria-expanded', 'true');
+    document.body.classList.remove('idle');
+    clearTimeout(idleTimer);
+  }
+  function closePanel() {
+    open = false;
+    panelEl.classList.remove('open');
+    panelEl.setAttribute('aria-hidden', 'true');
+    gearEl.setAttribute('aria-expanded', 'false');
+    wake();
+  }
+  gearEl.addEventListener('click', function (ev) {
+    ev.stopPropagation();
+    if (open) closePanel(); else openPanel();
+  });
+  closeEl.addEventListener('click', function (ev) { ev.stopPropagation(); closePanel(); });
+
+  document.addEventListener('pointerdown', function (ev) {
+    if (!open) return;
+    if (panelEl.contains(ev.target) || gearEl.contains(ev.target)) return;
+    closePanel();
+  }, true);
+
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Escape' && open) closePanel();
+  });
+
+  /* 时刻 */
+  function setPreset(i) {
+    if (i < 0 || i >= PRESETS.length) return;
+    targetIdx = i;
+    aimAt(i, false);
+    auto = false;                 /* 选定时刻 = 要这个构图，停止巡航 */
+    syncAll();
+    save();
+  }
+  timeBtns.forEach(function (b) {
+    b.addEventListener('click', function () {
+      setPreset(parseInt(b.getAttribute('data-i'), 10) || 0);
+    });
+  });
+
+  /* 滑杆 */
+  SLIDERS.forEach(function (s) {
+    var key = s[0];
+    var el = document.getElementById('s_' + key);
+    if (!el) return;
+    el.addEventListener('input', function () {
+      cfg[key] = parseFloat(el.value);
+      if (key === 'amplitude' || key === 'scale' || key === 'choppiness' ||
+          key === 'turn' || key === 'group') {
+        rebuildWaves();
+      }
+      snap(PRESETS[targetIdx]);
+      var out = document.getElementById('v_' + key);
+      if (out) out.textContent = fmt(key, cfg[key]);
+      paintRange(el);
+      saveSoon();
+    });
+  });
+
+  /* 动作 */
+  bPause.addEventListener('click', function () {
+    paused = !paused;
+    syncToggles();
+  });
+  bOrbit.addEventListener('click', function () {
+    auto = !auto;
+    if (auto) openPanel();        /* 巡航时面板留着，方便随时关掉 */
+    document.body.classList.remove('idle');
+    syncToggles();
+    save();
+  });
+  bAim.addEventListener('click', function () {
+    auto = false;
+    aimAt(targetIdx, false);
+    syncToggles();
+    save();
+  });
+  bReset.addEventListener('click', function () {
+    Object.keys(DEFAULTS).forEach(function (k) { cfg[k] = DEFAULTS[k]; });
+    rebuildWaves();
+    snap(PRESETS[targetIdx]);
+    paused = false;
+    auto = false;
+    setQuality('auto');
+    syncAll();
+    save();
+  });
+
+  /* 画质 */
+  qualBtns.forEach(function (b) {
+    b.addEventListener('click', function () {
+      setQuality(b.getAttribute('data-q'));
+    });
+  });
+
+  /* 鼠标闲置 → 按钮变淡，画面干净 */
+  window.addEventListener('pointermove', wake, { passive: true });
+  window.addEventListener('pointerdown', wake, { passive: true });
+  wake();
+
+  /* 首次使用提示（只出现一次；#clean 不显示） */
+  (function () {
+    if (CLEAN) return;
+    var seenKey = SKEY + '.tip';
+    var seen = false;
+    try { seen = localStorage.getItem(seenKey) === '1'; } catch (e) {}
+    if (seen) return;
+    setTimeout(function () {
+      tipEl.classList.add('show');
+      try { localStorage.setItem(seenKey, '1'); } catch (e) {}
+      setTimeout(function () { tipEl.classList.remove('show'); }, 5200);
+    }, 1500);
+  })();
+
+  syncAll();
+
+  /* =======================================================================
+     window.Ocean —— 对外预留的控制接口（浏览器调试 / 二次开发）
+       Ocean.setWaves({ amplitude:1.8, scale:0.7, speed:1.3, turn:0.4 })
+       Ocean.setPreset('极夜') 或 Ocean.setPreset(2)      切换时刻
+       Ocean.setCamera({ az:3.7, el:0.2, dist:120 })       设定镜头
+       Ocean.setQuality('auto' | 'high' | 'eco')           画质
+       Ocean.aimSun() / Ocean.setPaused(true) / Ocean.setAutoOrbit(true)
+       Ocean.state()                                       读回当前全部参数
+     ======================================================================= */
+  var api = {
+    presets: PRESETS.map(function (p) { return p.name; }),
+    state: function () {
+      var s = { preset: PRESETS[targetIdx].name, paused: paused, autoOrbit: auto,
+                quality: quality, time: clock,
+                camera: { az: cam.taz, el: cam.tel, dist: cam.tdist } };
+      Object.keys(cfg).forEach(function (k) { s[k] = cfg[k]; });
+      return s;
+    },
+    setWaves: function (o) {
+      if (!o) return api.state();
+      Object.keys(o).forEach(function (k) {
+        if (Object.prototype.hasOwnProperty.call(cfg, k) && typeof o[k] === 'number') cfg[k] = o[k];
+      });
+      rebuildWaves();
+      snap(PRESETS[targetIdx]);
+      syncSliders();
+      save();
+      return api.state();
+    },
+    setPreset: function (p) {
+      var i = (typeof p === 'number') ? Math.round(p) - 1 : api.presets.indexOf(p);
+      if (i >= 0 && i < PRESETS.length) setPreset(i);
+      return api.state();
+    },
+    setCamera: function (o) {
+      ['az', 'el', 'dist'].forEach(function (k) {
+        if (o && typeof o[k] === 'number') cam['t' + k] = o[k];
+      });
+      return api.state();
+    },
+    setQuality: function (q) { setQuality(q); return api.state(); },
+    aimSun: function () { auto = false; aimAt(targetIdx, false); syncToggles(); save(); return api.state(); },
+    setSky: function (o) {
+      var p = PRESETS[targetIdx];
+      ['sun', 'sunCol', 'zenith', 'horizon', 'ground', 'deep', 'shallow'].forEach(function (k) {
+        if (o && o[k] && o[k].length === 3) { p[k] = o[k].slice(); cur[k] = o[k].slice(); }
+      });
+      return api.state();
+    },
+    setSun: function (x, y, z) { PRESETS[targetIdx].sun = [x, y, z]; snap(PRESETS[targetIdx]); return api.state(); },
+    setSunColor: function (r, g, b) { PRESETS[targetIdx].sunCol = [r, g, b]; snap(PRESETS[targetIdx]); return api.state(); },
+    setTime: function (t) { clock = Number(t) || 0; waveClock = 0; return api.state(); },
+    setPaused: function (v) { paused = !!v; syncToggles(); return api.state(); },
+    setAutoOrbit: function (v) { auto = !!v; syncToggles(); save(); return api.state(); },
+    togglePanel: function () { if (open) closePanel(); else openPanel(); },
+    cfg: cfg, gl: gl, presetsRaw: PRESETS
+  };
+  window.Ocean = api;
+
+  requestAnimationFrame(frame);
+  setTimeout(function () {
+    loader.classList.add('gone');
+    setTimeout(function () { loader.style.display = 'none'; }, 1100);
+  }, 380);
+})();
+</script>
+</body>
+</html>
