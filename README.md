@@ -14,8 +14,8 @@
 
 一整页的 WebGL 海洋，铺在界面底下当背景，透明玻璃叠在它上面。
 
-- 单文件、零依赖、零外部资源：一个 `<canvas>` 加约 1500 行原生 WebGL，不加载任何图片、视频或第三方库。
-- 海面是顶点位移的网格，片元着色器里自己算 5 阶噪声波形、日光高光、菲涅尔反射和泡沫带。
+- 单文件、零依赖、零外部资源：一个 `<canvas>` 加一千出头的原生 WebGL / HTML（`assets/ocean.html` 共 1085 行，含它自带的调试 UI），不加载任何图片、视频或第三方库。
+- 海面是顶点位移的网格，由 8 组正弦波叠加驱动；日光高光、菲涅尔反射、泡沫带都在片元着色器里算，噪声是自己写的（5 阶用来铺云，3 阶做涟漪和泡沫）。
 - 天空是单独一遍全屏 pass，颜色随时间变化（正午 / 黄昏 / 极夜三套预置）。
 - 通过 `<iframe>` 挂在 DSH 页面里，隔离样式与 WebGL 上下文；父页面用 `postMessage` 控制它。
 
@@ -85,7 +85,7 @@ npm run build          # 由 lib/client.js.tpl + assets/ocean.html 生成 lib/cl
 
 ## 已知问题（如实列出）
 
-1. **"R 角"没做出来。** 输入区左上角，侧栏竖边和输入区横边相接的那个阴角，想要一段从竖边滑到横边的弧（术语上属于 inverted radius / concave corner / cove fillet 那一类）。我试过补块 + `border-top-right-radius`、`mask-image` 挖圆、`clip-path` 贝塞尔，都没做出想要的那个形状，最后把这几个档位全删了，只留圆角和直角。代码里还留着 `cornerPath()` 这类没被调用的函数，谁想做可以接着来。
+1. **输入区上沿的 R 角没做对。** 这里说的是输入区**底板的上沿**（侧栏竖边和底板横边相接处那一段），不是输入框自己的四个角。想要一段从竖边滑到横边的弧（术语上属于 inverted radius / concave corner / cove fillet 那一类）。我试过补块 + `border-top-right-radius`、`mask-image` 挖圆、`clip-path` 贝塞尔，都没做出想要的那个形状，最后把这几个档位全删了，只留圆角和直角。代码里还留着 `cornerPath()` 这类没被调用的函数，谁想做可以接着来。
 2. **没有测试。** 没有单测、没有 Playwright 验收、没有 CI。现在的正确性靠"改完刷新看一眼"。
 3. **只在一台机器上验证过。** Windows 11 + DSH 0.2.2-rc.5 + Electron 44 / Chrome 152。macOS、Linux、其他 DSH 版本没试过。
 4. **DSH 内部类名是硬编码的。** 选择器里有 `.an3WzG_scrollBody`、`.mP3x-q_frame`、`.AnXs9G_panel` 这种带哈希的类名，DSH 一升级就可能全部失效。这是最脆的一处。
